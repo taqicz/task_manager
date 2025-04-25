@@ -10,9 +10,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.taskmanager.database.TaskDatabase;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements TaskAdapter.OnTaskListener {
 
@@ -21,7 +25,7 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.OnTas
 
     private RecyclerView recyclerView;
     private TaskAdapter taskAdapter;
-    private ArrayList<Task> taskList;
+    private ArrayList<Task> taskList = new ArrayList<>(); // Initialize taskList
     private FloatingActionButton fabAddTask;
 
     @Override
@@ -29,30 +33,33 @@ public class MainActivity extends AppCompatActivity implements TaskAdapter.OnTas
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialize the task list
-        taskList = new ArrayList<>();
+        // ExecutorService untuk menjalankan operasi database di thread terpisah
+        ExecutorService executor = Executors.newSingleThreadExecutor();
 
-        // Add some sample tasks
-        taskList.add(new Task("Complete Android assignment", "Finish the RecyclerView implementation"));
-        taskList.add(new Task("Buy groceries", "Milk, eggs, bread"));
-        taskList.add(new Task("Call mom", "Don't forget to wish her happy birthday"));
+        // Jalankan operasi database di thread terpisah
+        executor.execute(() -> {
+            TaskDatabase db = TaskDatabase.getInstance(getApplicationContext());
+            List<Task> tasks = db.taskDao().getAllTasks(); // Load tasks from database
 
-        // Set up RecyclerView
-        recyclerView = findViewById(R.id.recyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+            // Tambahkan data ke taskList (di thread utama)
+            runOnUiThread(() -> {
+                taskList.addAll(tasks);
 
-        // Initialize adapter
-        taskAdapter = new TaskAdapter(taskList, this);
-        recyclerView.setAdapter(taskAdapter);
+                // Set up RecyclerView
+                recyclerView = findViewById(R.id.recyclerView);
+                recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+                // Initialize adapter
+                taskAdapter = new TaskAdapter(taskList, this);
+                recyclerView.setAdapter(taskAdapter);
+            });
+        });
 
         // Set up FAB for adding new tasks
         fabAddTask = findViewById(R.id.fabAddTask);
-        fabAddTask.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, AddTaskActivity.class);
-                startActivityForResult(intent, ADD_TASK_REQUEST);
-            }
+        fabAddTask.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, AddTaskActivity.class);
+            startActivityForResult(intent, ADD_TASK_REQUEST);
         });
     }
 
